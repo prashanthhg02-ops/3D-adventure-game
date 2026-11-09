@@ -1,0 +1,483 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Relic of the Wilds</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+      --gold: #ffd782;
+      --ink: #13201c;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #101b20;
+      color: #fff7e7;
+    }
+
+    #game { position: fixed; inset: 0; }
+    canvas { display: block; }
+
+    .hud {
+      position: fixed;
+      z-index: 2;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: clamp(18px, 4vw, 42px);
+      pointer-events: none;
+      text-shadow: 0 2px 12px #111a;
+    }
+
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 20px;
+    }
+
+    .brand { letter-spacing: .18em; font-size: 11px; color: var(--gold); }
+    h1 {
+      margin: 7px 0 0;
+      font-size: clamp(23px, 4vw, 38px);
+      letter-spacing: .04em;
+      font-weight: 600;
+    }
+
+    .relic-counter {
+      border: 1px solid #fff5;
+      background: #10211dbb;
+      padding: 12px 16px;
+      border-radius: 12px;
+      font-size: 14px;
+      white-space: nowrap;
+    }
+
+    .relic-counter strong { color: var(--gold); font-size: 18px; }
+
+    .bottom {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 24px;
+    }
+
+    #message {
+      max-width: 430px;
+      font-size: clamp(15px, 2vw, 19px);
+      line-height: 1.5;
+      color: #fff4d8;
+    }
+
+    .controls {
+      color: #fff9;
+      font-size: 12px;
+      line-height: 1.8;
+      text-align: right;
+    }
+
+    kbd {
+      display: inline-block;
+      min-width: 25px;
+      padding: 1px 6px;
+      border: 1px solid #fff6;
+      border-radius: 5px;
+      background: #11221eaa;
+      color: white;
+      font: inherit;
+      text-align: center;
+    }
+
+    .screen {
+      position: fixed;
+      z-index: 4;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      background: linear-gradient(180deg, #10211d99, #101b20cc);
+      text-align: center;
+    }
+
+    .card { max-width: 590px; }
+    .eyebrow { color: var(--gold); letter-spacing: .23em; font-size: 12px; }
+    .card h2 {
+      margin: 12px 0;
+      font-size: clamp(38px, 8vw, 72px);
+      line-height: .98;
+      font-weight: 600;
+    }
+    .card p { color: #fffC; line-height: 1.7; }
+    button {
+      margin-top: 16px;
+      border: 0;
+      border-radius: 999px;
+      padding: 14px 28px;
+      background: var(--gold);
+      color: var(--ink);
+      font: 700 14px "Trebuchet MS", "Segoe UI", sans-serif;
+      letter-spacing: .08em;
+      cursor: pointer;
+      pointer-events: auto;
+      box-shadow: 0 8px 30px #0005;
+    }
+    button:hover { background: #ffe5ad; transform: translateY(-1px); }
+    .hidden { display: none; }
+
+    @media (max-width: 600px) {
+      .bottom { align-items: flex-start; flex-direction: column; gap: 10px; }
+      .controls { text-align: left; }
+      .topbar { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <div id="game"></div>
+  <div class="hud">
+    <div class="topbar">
+      <div>
+        <div class="brand">A WILDERNESS ADVENTURE</div>
+        <h1>RELIC OF THE WILDS</h1>
+      </div>
+      <div class="relic-counter">RELICS &nbsp; <strong id="count">0 / 3</strong></div>
+    </div>
+    <div class="bottom">
+      <div id="message">Find the three ancient relics. The sealed gate waits beyond the forest.</div>
+      <div class="controls"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move &nbsp; <kbd>SHIFT</kbd> run<br><kbd>←</kbd><kbd>→</kbd> or drag to look around</div>
+    </div>
+  </div>
+
+  <div class="screen" id="intro">
+    <div class="card">
+      <div class="eyebrow">THE ISLAND REMEMBERS</div>
+      <h2>Relic of<br>the Wilds</h2>
+      <p>Three lost relics power the old gate. Search the overgrown island, follow the light, and find your way home.</p>
+      <p>Move with <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>. Hold <kbd>SHIFT</kbd> to run. Use the arrow keys or drag to look around.</p>
+      <button id="start">BEGIN THE JOURNEY</button>
+    </div>
+  </div>
+
+  <div class="screen hidden" id="ending">
+    <div class="card">
+      <div class="eyebrow">THE GATE IS OPEN</div>
+      <h2>You found<br>your way.</h2>
+      <p>The island's light returns as you step through the ancient arch.</p>
+      <button id="again">PLAY AGAIN</button>
+    </div>
+  </div>
+
+  <script type="module">
+    import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.166.1/build/three.module.js";
+
+    const mount = document.querySelector("#game");
+    const countLabel = document.querySelector("#count");
+    const message = document.querySelector("#message");
+    const intro = document.querySelector("#intro");
+    const ending = document.querySelector("#ending");
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color("#9dc5c1");
+    scene.fog = new THREE.Fog("#9dc5c1", 34, 105);
+
+    const camera = new THREE.PerspectiveCamera(58, innerWidth / innerHeight, 0.1, 180);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.15;
+    mount.appendChild(renderer.domElement);
+
+    scene.add(new THREE.HemisphereLight("#e4f4e3", "#293c2d", 2.1));
+    const sun = new THREE.DirectionalLight("#fff0cb", 3);
+    sun.position.set(-18, 30, 12);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.camera.left = -34;
+    sun.shadow.camera.right = 34;
+    sun.shadow.camera.top = 34;
+    sun.shadow.camera.bottom = -34;
+    scene.add(sun);
+
+    const ground = new THREE.Mesh(
+      new THREE.PlaneGeometry(150, 150),
+      new THREE.MeshStandardMaterial({ color: "#597a52", roughness: 1 })
+    );
+    ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = true;
+    scene.add(ground);
+
+    const path = new THREE.Mesh(
+      new THREE.PlaneGeometry(8, 76),
+      new THREE.MeshStandardMaterial({ color: "#a68b62", roughness: 1 })
+    );
+    path.rotation.x = -Math.PI / 2;
+    path.position.set(0, 0.015, -10);
+    path.receiveShadow = true;
+    scene.add(path);
+
+    const player = new THREE.Group();
+    const body = new THREE.Mesh(
+      new THREE.CapsuleGeometry(0.42, 0.8, 5, 10),
+      new THREE.MeshStandardMaterial({ color: "#bf6845", roughness: 0.82 })
+    );
+    body.position.y = 0.88;
+    body.castShadow = true;
+    player.add(body);
+    const head = new THREE.Mesh(
+      new THREE.SphereGeometry(0.31, 16, 12),
+      new THREE.MeshStandardMaterial({ color: "#e5b68b", roughness: 0.8 })
+    );
+    head.position.set(0, 1.62, 0);
+    head.castShadow = true;
+    player.add(head);
+    const pack = new THREE.Mesh(
+      new THREE.BoxGeometry(0.48, 0.56, 0.24),
+      new THREE.MeshStandardMaterial({ color: "#e0b15f", roughness: 0.9 })
+    );
+    pack.position.set(0, 1, 0.42);
+    pack.castShadow = true;
+    player.add(pack);
+    player.position.set(0, 0, 32);
+    scene.add(player);
+
+    const obstacles = [];
+    function addTree(x, z, size = 1) {
+      const tree = new THREE.Group();
+      const trunk = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.2 * size, 0.34 * size, 2.2 * size, 7),
+        new THREE.MeshStandardMaterial({ color: "#644b35", roughness: 1 })
+      );
+      trunk.position.y = 1.1 * size;
+      trunk.castShadow = true;
+      tree.add(trunk);
+      const leaves = new THREE.Mesh(
+        new THREE.IcosahedronGeometry(1.25 * size, 1),
+        new THREE.MeshStandardMaterial({ color: Math.random() > 0.5 ? "#315846" : "#3e6548", roughness: 1 })
+      );
+      leaves.position.y = 2.25 * size;
+      leaves.castShadow = true;
+      tree.add(leaves);
+      tree.position.set(x, 0, z);
+      scene.add(tree);
+      obstacles.push({ x, z, radius: 0.7 * size });
+    }
+
+    function addRock(x, z, size = 1) {
+      const rock = new THREE.Mesh(
+        new THREE.DodecahedronGeometry(size, 0),
+        new THREE.MeshStandardMaterial({ color: "#77796b", roughness: 1 })
+      );
+      rock.position.set(x, size * 0.56, z);
+      rock.rotation.set(Math.random(), Math.random(), Math.random());
+      rock.scale.set(1.2, 0.8, 0.9);
+      rock.castShadow = true;
+      rock.receiveShadow = true;
+      scene.add(rock);
+      obstacles.push({ x, z, radius: size * 0.85 });
+    }
+
+    let seed = 937;
+    function random() {
+      seed = (seed * 16807) % 2147483647;
+      return (seed - 1) / 2147483646;
+    }
+    for (let i = 0; i < 95; i++) {
+      const z = -31 + random() * 65;
+      const x = (random() < 0.5 ? -1 : 1) * (6 + random() * 22);
+      addTree(x, z, 0.65 + random() * 0.9);
+    }
+    for (let i = 0; i < 24; i++) {
+      const z = -30 + random() * 61;
+      const x = (random() < 0.5 ? -1 : 1) * (4.8 + random() * 13);
+      addRock(x, z, 0.45 + random() * 0.8);
+    }
+
+    const relics = [];
+    const relicMaterial = new THREE.MeshStandardMaterial({
+      color: "#ffd374",
+      emissive: "#c27a1b",
+      emissiveIntensity: 1.5,
+      metalness: 0.5,
+      roughness: 0.24
+    });
+    function addRelic(x, z) {
+      const group = new THREE.Group();
+      const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.52, 0), relicMaterial);
+      gem.castShadow = true;
+      group.add(gem);
+      const halo = new THREE.Mesh(
+        new THREE.TorusGeometry(0.76, 0.035, 8, 36),
+        new THREE.MeshBasicMaterial({ color: "#ffe6a1" })
+      );
+      halo.rotation.x = Math.PI / 2;
+      group.add(halo);
+      group.position.set(x, 1.15, z);
+      scene.add(group);
+      const light = new THREE.PointLight("#ffc963", 2.5, 7);
+      light.position.copy(group.position);
+      scene.add(light);
+      relics.push({ group, light, x, z, found: false, phase: random() * 6 });
+    }
+    addRelic(-14, 17);
+    addRelic(15, -3);
+    addRelic(-11, -23);
+
+    function addGate() {
+      const gate = new THREE.Group();
+      const stone = new THREE.MeshStandardMaterial({ color: "#8e8974", roughness: 0.95 });
+      for (const x of [-2.4, 2.4]) {
+        const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.55, 5.2, 8), stone);
+        pillar.position.set(x, 2.6, 0);
+        pillar.castShadow = true;
+        gate.add(pillar);
+      }
+      const lintel = new THREE.Mesh(new THREE.BoxGeometry(5.7, 0.85, 0.9), stone);
+      lintel.position.y = 5.15;
+      lintel.castShadow = true;
+      gate.add(lintel);
+      const portal = new THREE.Mesh(
+        new THREE.PlaneGeometry(4.2, 4.3),
+        new THREE.MeshBasicMaterial({ color: "#506767", transparent: true, opacity: 0.56, side: THREE.DoubleSide })
+      );
+      portal.position.set(0, 2.65, 0.05);
+      gate.add(portal);
+      gate.position.set(0, 0, -35);
+      scene.add(gate);
+      return { gate, portal };
+    }
+    const exit = addGate();
+
+    const keys = new Set();
+    let yaw = 0;
+    let dragging = false;
+    let lastPointerX = 0;
+    let started = false;
+    let completed = false;
+    let collected = 0;
+    const clock = new THREE.Clock();
+
+    addEventListener("keydown", (event) => {
+      const key = event.key.toLowerCase();
+      if (["arrowup", "arrowdown", "arrowleft", "arrowright", " "].includes(key)) event.preventDefault();
+      keys.add(key);
+    });
+    addEventListener("keyup", (event) => keys.delete(event.key.toLowerCase()));
+    renderer.domElement.addEventListener("pointerdown", (event) => {
+      dragging = true;
+      lastPointerX = event.clientX;
+      renderer.domElement.setPointerCapture(event.pointerId);
+    });
+    renderer.domElement.addEventListener("pointerup", () => { dragging = false; });
+    renderer.domElement.addEventListener("pointermove", (event) => {
+      if (!dragging || !started || completed) return;
+      yaw -= (event.clientX - lastPointerX) * 0.005;
+      lastPointerX = event.clientX;
+    });
+
+    function resetGame() {
+      player.position.set(0, 0, 32);
+      yaw = 0;
+      collected = 0;
+      completed = false;
+      for (const relic of relics) {
+        relic.found = false;
+        relic.group.visible = true;
+        relic.light.visible = true;
+      }
+      countLabel.textContent = "0 / 3";
+      message.textContent = "Find the three ancient relics. The sealed gate waits beyond the forest.";
+      ending.classList.add("hidden");
+      intro.classList.add("hidden");
+      started = true;
+    }
+    document.querySelector("#start").addEventListener("click", resetGame);
+    document.querySelector("#again").addEventListener("click", resetGame);
+
+    const forward = new THREE.Vector3();
+    const right = new THREE.Vector3();
+    const move = new THREE.Vector3();
+    function update(delta, elapsed) {
+      if (!started || completed) return;
+      if (keys.has("arrowleft")) yaw += delta * 1.8;
+      if (keys.has("arrowright")) yaw -= delta * 1.8;
+
+      forward.set(-Math.sin(yaw), 0, -Math.cos(yaw));
+      right.set(Math.cos(yaw), 0, -Math.sin(yaw));
+      move.set(0, 0, 0);
+      if (keys.has("w") || keys.has("arrowup")) move.add(forward);
+      if (keys.has("s") || keys.has("arrowdown")) move.sub(forward);
+      if (keys.has("d")) move.add(right);
+      if (keys.has("a")) move.sub(right);
+      const isMoving = move.lengthSq() > 0;
+      if (isMoving) {
+        move.normalize();
+        const speed = keys.has("shift") ? 10 : 6;
+        const nextX = THREE.MathUtils.clamp(player.position.x + move.x * speed * delta, -35, 35);
+        const nextZ = THREE.MathUtils.clamp(player.position.z + move.z * speed * delta, -39, 39);
+        const blocked = obstacles.some((item) => Math.hypot(nextX - item.x, nextZ - item.z) < item.radius + 0.5);
+        if (!blocked) player.position.set(nextX, 0, nextZ);
+        player.rotation.y = Math.atan2(-move.x, -move.z);
+      }
+      body.position.y = 0.88 + (isMoving ? Math.sin(elapsed * (keys.has("shift") ? 15 : 10)) * 0.045 : 0);
+
+      for (const relic of relics) {
+        if (!relic.found) {
+          relic.group.rotation.y += delta * 0.8;
+          relic.group.position.y = 1.15 + Math.sin(elapsed * 2 + relic.phase) * 0.16;
+          relic.light.position.y = relic.group.position.y;
+          if (Math.hypot(player.position.x - relic.x, player.position.z - relic.z) < 1.65) {
+            relic.found = true;
+            relic.group.visible = false;
+            relic.light.visible = false;
+            collected++;
+            countLabel.textContent = `${collected} / 3`;
+            message.textContent = collected === 3
+              ? "All relics found! The gate is glowing at the far end of the island."
+              : "A relic joins your collection. Keep searching the island.";
+          }
+        }
+      }
+
+      const target = new THREE.Vector3(player.position.x, 1.2, player.position.z);
+      const desiredCamera = new THREE.Vector3(
+        player.position.x + Math.sin(yaw) * 8,
+        5.2,
+        player.position.z + Math.cos(yaw) * 8
+      );
+      camera.position.lerp(desiredCamera, 1 - Math.exp(-5 * delta));
+      camera.lookAt(target);
+
+      exit.portal.material.color.set(collected === 3 ? "#78ffe1" : "#506767");
+      exit.portal.material.opacity = collected === 3 ? 0.86 : 0.42;
+      if (collected === 3 && Math.hypot(player.position.x, player.position.z + 35) < 3.2) {
+        completed = true;
+        ending.classList.remove("hidden");
+      }
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const delta = Math.min(clock.getDelta(), 0.05);
+      update(delta, clock.elapsedTime);
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    addEventListener("resize", () => {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+      renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    });
+  </script>
+</body>
+</html>
